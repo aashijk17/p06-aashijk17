@@ -269,6 +269,16 @@ class Engine(BaseEngine):
                 if self.image.mode not in ("L", "P", "RGB", "RGBA"):
                     self.image = self.image.convert("RGBA")
 
+                # Remember which pixels were transparent before quantizing,
+                # so the palette index that holds them can be restored.
+                alpha_mask = None
+                if "A" in self.image.mode or "transparency" in self.image.info:
+                    alpha_mask = (
+                        self.image.convert("RGBA")
+                        .getchannel("A")
+                        .point(lambda a: 255 if a == 0 else 0)
+                    )
+
                 # libimagequant might not be enabled on compile time
                 # but it's better than default octree for RGBA images
                 quantize_method = (
@@ -277,6 +287,13 @@ class Engine(BaseEngine):
                     else None
                 )
                 self.image = self.image.quantize(method=quantize_method)
+
+                if alpha_mask is not None:
+                    counts = self.image.histogram(alpha_mask)
+                    if sum(counts) > 0:
+                        self.image.info["transparency"] = counts.index(
+                            max(counts)
+                        )
 
         ext = requested_extension or self.get_default_extension()
 
